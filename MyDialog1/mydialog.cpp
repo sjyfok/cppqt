@@ -1,0 +1,23 @@
+#include "mydialog.h"
+#include "ui_mydialog.h"
+
+MyDialog::MyDialog(QWidget *parent) :
+    QDialog(parent),
+    ui(new Ui::MyDialog)
+{
+    ui->setupUi(this);
+}
+
+MyDialog::~MyDialog()
+{
+    delete ui;
+}
+
+void MyDialog::on_pushButton_clicked()
+{
+//    close();
+//    MyDialog dlg;
+//    if (dlg.exec() == QDialog::Accepted)
+//        show();
+    accept();
+}
