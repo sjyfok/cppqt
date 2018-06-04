@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 
+class QToolBar;
 class QAction;
 class QLabel;
 class FindDialog;
@@ -40,9 +41,9 @@ private:
     void readSettings();
     void writeSettings();
     bool okToContinue();
-    bool loadFile(const QString &fineName);
-    bool saveFile(const QString &fineName);
-    void setCurrentFile(const QString &fineName);
+    bool loadFile(const QString &fileName);
+    bool saveFile(const QString &fileName);
+    void setCurrentFile(const QString &fileName);
     void updateRecenFileActions();
     QString strippedName(const QString &fullFileName);
 

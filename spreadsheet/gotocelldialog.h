@@ -2,12 +2,13 @@
 #define GOTOCELLDIALOG_H
 
 #include <QDialog>
+#include "ui_gotocelldialog.h"
 
 namespace Ui {
 class GoToCellDialog;
 }
 
-class GoToCellDialog : public QDialog
+class GoToCellDialog : public QDialog, public Ui::GoToCellDialog
 {
     Q_OBJECT
 

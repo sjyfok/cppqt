@@ -3,12 +3,13 @@
 
 
 #include <QDialog>
+#include "ui_sortdialog.h"
 
 namespace Ui {
 class SortDialog;
 }
 
-class SortDialog : public QDialog
+class SortDialog : public QDialog, public Ui::SortDialog
 {
     Q_OBJECT
 

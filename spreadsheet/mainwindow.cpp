@@ -1,6 +1,11 @@
 #include <QtGui>
 #include <QAction>
 #include <QMenuBar>
+#include <QToolBar>
+#include <QLabel>
+#include <QStatusBar>
+#include <QMessageBox>
+#include <QFileDialog>
 
 #include "finddialog.h"
 #include "gotocelldialog.h"
@@ -8,6 +13,7 @@
 #include "sortdialog.h"
 #include "spreadsheet.h"
 
+class GoToCellDialog;
 
 MainWindow::MainWindow()
 {
@@ -216,4 +222,296 @@ void MainWindow::createContextMenu()
     spreadsheet->addAction(copyAction);
     spreadsheet->addAction(pasteAction);
     spreadsheet->setContextMenuPolicy(Qt::ActionsContextMenu);
+}
+
+void MainWindow::createToolBars()
+{
+    fileToolBar = addToolBar(tr("&File"));
+    fileToolBar->addAction(newAction);
+    fileToolBar->addAction(openAction);
+    fileToolBar->addAction(saveAction);
+
+    editToolBar = addToolBar(tr("&Edit"));
+    editToolBar->addAction(cutAction);
+    editToolBar->addAction(copyAction);
+    editToolBar->addAction(pasteAction);
+    editToolBar->addSeparator();
+    editToolBar->addAction(findAction);
+    editToolBar->addAction(goToCellAction);
+}
+
+void MainWindow::createStatusBar()
+{
+    locationLabel = new QLabel("W999");
+    locationLabel->setAlignment(Qt::AlignHCenter);
+    locationLabel->setMinimumSize(locationLabel->sizeHint());
+
+    formulaLabel = new QLabel;
+    formulaLabel->setIndent(3);
+
+    statusBar()->addWidget(locationLabel);
+    statusBar()->addWidget(formulaLabel, 1);
+
+    connect(spreadsheet, SIGNAL(currentCellChanged(int,int,int,int)),
+            this, SLOT(updateStatusBar()));
+    connect(spreadsheet, SIGNAL(modified()), this,
+            SLOT(SpreadsheetModified()));
+    updateStatusBar();
+}
+
+
+void MainWindow::updateStatusBar()
+{
+    locationLabel->setText(spreadsheet->currentLocation());
+    formulaLabel->setText(spreadsheet->currentFormula());
+}
+
+
+void MainWindow::SpreadsheetModified()
+{
+    setWindowModified(true);
+    updateStatusBar();
+}
+
+void MainWindow::newFile()
+{
+    if (okToContinue())
+    {
+        spreadsheet->clear();
+        setCurrentFile("");
+    }
+}
+
+bool MainWindow::okToContinue()
+{
+    if (isWindowModified())
+    {
+        int r = QMessageBox::warning(this, tr("Spreadsheet"),
+                                     tr("The document has been modified.\n"
+                                        "Do you want to save your changes?"),
+                                     QMessageBox::Yes | QMessageBox::No
+                                     |QMessageBox::Cancel);
+        if (r == QMessageBox::Yes)
+        {
+            return save();
+        }
+        else if (r == QMessageBox::Cancel)
+        {
+            return false;
+        }
+
+    }
+    return true;
+}
+
+void MainWindow::open()
+{
+    if (okToContinue())
+    {
+        QString fileName = QFileDialog::getOpenFileName(this,
+                                                        tr("Open Spreadsheet"), ".",
+                                                        tr("Spreadsheet files (*.sp)"));
+        if (!fileName.isEmpty())
+            loadFile(fileName);
+    }
+}
+
+bool MainWindow::loadFile(const QString &fileName)
+{
+    if (!spreadsheet->readFile(fileName))
+    {
+        statusBar()->showMessage(tr("Loading canceled"), 2000);
+        return false;
+    }
+    setCurrentFile((fileName));
+    statusBar()->showMessage(tr("File loaded"), 2000);
+    return true;
+}
+
+bool MainWindow::save()
+{
+    if (curFile.isEmpty()){
+        return saveAs();
+    }
+    else
+    {
+        return saveFile(curFile);
+    }
+}
+
+bool MainWindow::saveFile(const QString &fileName)
+{
+    if (!spreadsheet->writeFile(fileName))
+    {
+        statusBar()->showMessage(tr("Saving canceled"), 2000);
+        return false;
+    }
+    setCurrentFile(fileName);
+    statusBar()->showMessage(tr("File saved"), 2000);
+    return true;
+}
+
+bool MainWindow::saveAs()
+{
+    QString fileName = QFileDialog::getSaveFileName(this,
+                                                    tr("Save Spreadsheet"), ".",
+                                                    tr("Spreadsheet files (*.sp)"));
+    if (fileName.isEmpty())
+        return false;
+    return saveFile(fileName);
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (okToContinue())
+    {
+        writeSettings();
+        event->accept();
+    }
+    else
+    {
+        event->ignore();
+    }
+}
+
+void MainWindow::setCurrentFile(const QString &fileName)
+{
+    curFile = fileName;
+    setWindowModified(false);
+    QString shownName = tr("Untitled");
+    if (!curFile.isEmpty())
+    {
+        shownName = strippedName(curFile);
+        recentFiles.removeAll(curFile);
+        recentFiles.prepend(curFile);
+        updateRecenFileActions();
+    }
+    setWindowTitle(tr("%l[*]-%2").arg(shownName).arg(tr("Spreadsheet")));
+}
+
+QString MainWindow::strippedName(const QString &fullFileName)
+{
+    return QFileInfo(fullFileName).fileName();
+}
+
+void MainWindow::updateRecenFileActions()
+{
+    QMutableStringListIterator i(recentFiles);
+    while (i.hasNext())
+    {
+        if (!QFile::exists(i.next()))
+            i.remove();
+    }
+    for (int j = 0; j < MaxRecentFiles; j ++)
+    {
+        if (j < recentFiles.count())
+        {
+            QString text = tr("&%1 %2").arg(j+1).arg(strippedName(recentFiles[j]));
+            recentFileActions[j]->setText(text);
+            recentFileActions[j]->setData(recentFiles[j]);
+            recentFileActions[j]->setVisible(true);
+        }
+        else
+        {
+            recentFileActions[j]->setVisible(false);
+        }
+    }
+    separatorAction->setVisible(!recentFiles.isEmpty());
+}
+
+void MainWindow::openRecentFile()
+{
+    if (okToContinue())
+    {
+        QAction *action = qobject_cast<QAction *>(sender());
+        if (action)
+        {
+            loadFile(action->data().toString());
+        }
+    }
+}
+
+void MainWindow::find()
+{
+    if (!findDialog)
+    {
+        findDialog = new FindDialog(this);
+        connect(findDialog, SIGNAL(findNext(QString,Qt::CaseSensitivity)),
+                spreadsheet, SLOT(findNext(QString,Qt::CaseSensitivity)));
+        connect(findDialog, SIGNAL(findPrevious(QString,Qt::CaseSensitivity)),
+                spreadsheet, SLOT(findPrevious(QString,Qt::CaseSensitivity)));
+
+    }
+    findDialog->show();
+    findDialog->raise();
+    findDialog->activateWindow();
+}
+
+void MainWindow::goToCell()
+{
+    GoToCellDialog dialog(this);
+    if (dialog.exec())
+    {
+        QString str = dialog.lineEdit->text().toUpper();
+        spreadsheet->setCurrentCell(str.mid(1).toInt()-1,
+                                    str[0].unicode()-'A');
+    }
+}
+
+void MainWindow::sort()
+{
+    SortDialog dialog(this);
+    QTableWidgetSelectionRange range = spreadsheet->selectedRange();
+    dialog.setColumnRange('A' + range.leftColumn(),
+                          'A' + range.rightColumn());
+
+    if (dialog.exec()) {
+        SpreadsheetCompare compare;
+        compare.keys[0] =
+              dialog.primaryColumnCombo->currentIndex();
+        compare.keys[1] =
+              dialog.secondaryColumnCombo->currentIndex() - 1;
+        compare.keys[2] =
+              dialog.tertiaryColumuCombo->currentIndex() - 1;
+        compare.ascending[0] =
+              (dialog.primaryOrderCombo->currentIndex() == 0);
+        compare.ascending[1] =
+              (dialog.secondaryOrderCombo->currentIndex() == 0);
+        compare.ascending[2] =
+              (dialog.tertiaryOrderCombo->currentIndex() == 0);
+        spreadsheet->sort(compare);
+    }
+}
+
+void MainWindow::about()
+{
+    QMessageBox::about(this, tr("About Spreadsheet"),
+                       tr("<h2>Spreadsheet 1.1</h2>"
+                          "<p>Copyright &copy; 2008 Software Inc."
+                          "<p>Spreadsheet is a small application that "
+                          "demonstrates, QAction, QMainWindow, QMenuBar, "
+                          "QStatusBar, QTableWidget, QToolBar, and many other "
+                          "Qt class."));
+}
+
+void MainWindow::writeSettings()
+{
+    QSettings settings("Software Inc.", "Spreadsheet");
+    settings.setValue("geometry", saveGeometry());
+    settings.setValue("recentFiles", recentFiles);
+    settings.setValue("showGrid", showGridAction->isChecked());
+    settings.setValue("autoRecalc", autoRecalcAction->isChecked());
+}
+
+
+void MainWindow::readSettings()
+{
+    QSettings settings("Software Inc.", "SpreadSheet");
+    restoreGeometry(settings.value("geometry").toByteArray());
+    recentFiles = settings.value("recentFiles").toStringList();
+    updateRecenFileActions();
+    bool showGrid = settings.value("showGrid", true).toBool();
+    showGridAction->setChecked(showGrid);
+    bool autoRecalc = settings.value("autoRecalc", true).toBool();
+    autoRecalcAction->setChecked(autoRecalc);
 }
